@@ -1,5 +1,7 @@
 ORDER = 6
 NODE_SIZE = -1 + (14*ORDER)
+MAX = ORDER - 1
+MIN = int((ORDER / 2) - 1)
 
 
 class TreeNode():
@@ -47,57 +49,158 @@ class TreeNode():
             if key >= self.keys[pos]:
                 break
             pos -= 1
-        
+
         return (self.keys[pos] == key), pos
 
+    def insert(self, key, rightNode, pos):
+        self.keys.insert(pos+1, key)
+        self.children.insert(pos+1, rightNode)
 
-def search_in_tree(key):
-    with open('arvore.ndx', 'r') as index_file:
-        root = root = int(index_file.readline())
-        return search_in_tree_recursive(key, root, 0, index_file)
+        self.keys.pop(-1)
+        self.children.pop(-1)
 
-
-def search_in_tree_recursive(key, root, pos, index_file):
-    if root == -1:
-        return -1
-
-    node = return_node(index_file, root)
-
-    result, pos = node.searck_key(key)
-    if result:
-        return root
-
-    return search_in_tree_recursive(key, node.children[pos], pos, index_file)
+        self.count += 1
 
 
-def return_node(index_file, root):
-    index_file.seek(7 + NODE_SIZE*root)
-    return TreeNode(index_file.readline())
+class BTree():
+    def __init__(self, file_name='arvore.ndx'):
+        self.__file_name = file_name
+        self.__node_count = 0
+        with open(self.__file_name, 'w') as index_file:
+            index_file.write('-1\n'.zfill(6))
+
+    def search(self, key):
+        with open(self.__file_name, 'r') as index_file:
+            root = int(index_file.readline())
+            return self.__search_recursive(key, root, index_file)
+
+    def __search_recursive(self, key, root, index_file):
+        if root == -1:
+            return -1
+
+        node = self.return_node(root, index_file)
+        result, pos = node.searck_key(key)
+        if result:
+            return root
+
+        return self.__search_recursive(key, node.children[pos], index_file)
+
+    def insert(self, key):
+        root = self.__get_root()
+
+        result, middleKey, rightNode = self.__overflow(key, root)
+        if result:
+            node = TreeNode()
+            node.insert(key, -1, 0)
+            node.keys[1] = middleKey
+            node.children[0] = root
+            node.children[1] = rightNode
+            self.__write(node, True)
+
+    def __overflow(self, key, root):
+        if root == -1:
+            middleKey = key
+            rightNode = -1
+            return True, middleKey, rightNode
+        
+        pos = -1
+        root_node = self.return_node(root)
+        result, pos = root_node.searck_key(key)
+
+        result, middleKey, rightNode = self.__overflow(key, root_node.children[pos])
+        if result:
+            if root_node.count < MAX:
+                root_node.insert(middleKey, rightNode, pos)
+                self.__update(root, root_node)
+                return False, middleKey, rightNode
+            else:
+                middleKey, rightNode = self.__split(middleKey, rightNode, root, pos)
+                return True, middleKey, rightNode
+        return False, -1, -1
+
+    def __split(self, middleKey, rightNode, root, pos):
+        cut_spot = -1
+        if pos < MIN:
+            cut_spot = MIN
+        else:
+            cut_spot = MIN + 1
+
+        root_node = self.return_node(root)
+
+        newRightNode = TreeNode()
+        for i in range(cut_spot + 1, root_node.count + 1):
+            newRightNode.keys[i - cut_spot] = root_node.keys[i]
+            newRightNode.children[i - cut_spot] = root_node.children[i]
+            
+            root_node.keys[i] = -1
+            root_node.children[i] = -1
+
+        newRightNode.count = root_node.count - cut_spot
+        root_node.count = cut_spot
+
+        if pos <= MIN:
+            root_node.insert(middleKey, rightNode, pos)
+        else:
+            newRightNode.insert(middleKey, rightNode, pos - cut_spot)
+
+        newMiddleKey = root_node.keys[root_node.count]
+        newRightNode.children[0] = root_node.children[root_node.count]
+
+        root_node.keys[root_node.count] = -1
+        root_node.children[root_node.count] = -1
+        root_node.count -= 1
+
+        self.__update(root, root_node)
+        self.__write(newRightNode)
+
+        return newMiddleKey, self.__node_count-1
+
+
+    def __write(self, node, is_root=False):
+        with open(self.__file_name, 'a') as index_file:
+            index_file.write(str(node))
+            self.__node_count += 1
+
+        if is_root:
+            with open(self.__file_name, 'r+') as index_file:
+                node_id = self.__node_count - 1
+                index_file.seek(0)
+                index_file.write('{}\n'.format(str(node_id).zfill(5)))
+
+    def __update(self, node_id, node):
+        with open(self.__file_name, 'r+') as index_file:
+            index_file.seek(7+NODE_SIZE*node_id)
+            index_file.write(str(node))
+
+    def __get_root(self):
+        root = ''
+        with open(self.__file_name, 'r') as index_file:
+            root = index_file.readline()
+        return int(root)
+
+    def return_node(self, node, index_file=None):
+        if node < 0:
+            return None
+
+        if index_file is None:
+            with open(self.__file_name, 'r') as index_file:
+                index_file.seek(7+NODE_SIZE*node)
+                return TreeNode(index_file.readline())
+        else:
+            index_file.seek(7+NODE_SIZE*node)
+            return TreeNode(index_file.readline())
 
 
 if __name__ == '__main__':
-
-    b = TreeNode()
-    b.count = 2
-    b.keys = [-1, 10, 20, -1, -1, -1]
-    b.children = [1, 2, -1, -1, -1, -1]
-
-    c = TreeNode()
-    c.count = 1
-    c.keys = [-1, 5, -1, -1, -1, -1]
-
-    d = TreeNode()
-    d.count = 1
-    d.keys = [-1, 15, -1, -1, -1, -1]
-
-    e = None
-
-    with open('arvore.ndx', 'w') as index_file:
-        index_file.write('{}\n'.format('0'.zfill(5)))
-        index_file.write(str(b))
-        index_file.write(str(c))
-        index_file.write(str(d))
-
-    with open('arvore.ndx', 'r') as index_file:
-        root = search_in_tree(16)
-        print(root)
+    tree = BTree()
+    tree.insert(10)
+    tree.insert(11)
+    tree.insert(12)
+    tree.insert(13)
+    tree.insert(14)
+    tree.insert(15)
+    tree.insert(9)
+    tree.insert(8)
+    tree.insert(16)
+    tree.insert(17)
+    tree.insert(18)
