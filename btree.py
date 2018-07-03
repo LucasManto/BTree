@@ -61,6 +61,15 @@ class TreeNode():
 
         self.count += 1
 
+    def remove(self, pos):
+        self.keys.pop(pos)
+        self.children.pop(pos)
+
+        self.keys.append(-1)
+        self.children.append(-1)
+
+        self.count -= 1
+
 
 class BTree():
     def __init__(self, file_name='arvore.ndx'):
@@ -155,6 +164,157 @@ class BTree():
 
         return newMiddleKey, self.__node_count-1
 
+    def remove(self, key):
+        with open(self.__file_name, 'r+') as index_file:
+            root = int(index_file.readline())
+            self.__remove_recursive(key, root)
+
+    def __remove_recursive(self, key, root):
+        if root == -1:
+            return
+
+        root_node = self.return_node(root)
+        result, pos = root_node.searck_key(key)
+        if result:
+            if root_node.children[pos] != -1:
+                self.__promoteNextKey(root, pos)
+                root_node = self.return_node(root)
+                self.__remove_recursive(root_node.keys[pos], root_node.children[pos])
+            else:
+                root_node.remove(pos)
+                self.__update(root, root_node)
+        else:
+            self.__remove_recursive(key, root_node.children[pos])
+
+        if root_node.children[pos] != -1:
+            child = root_node.children[pos]
+            child_node = self.return_node(child)
+            if child_node.count < MIN:
+                self.__restore(root, pos)
+                root_node = self.return_node(root)
+                if root_node.count == 0:
+                    self.__update(root, root_node, True)
+
+    def __restore(self, root, pos):
+        root_node = self.return_node(root)
+
+        if pos == 0:
+            sibling = root_node.children[1]
+            sibling_node = self.return_node(sibling)
+            if sibling_node.count > MIN:
+                self.__move_to_left(root, 1)
+            else:
+                self.__combine_siblings(root, 1)
+        else:
+            if pos == root_node.count:
+                sibling = root_node.children[pos - 1]
+                sibling_node = self.return_node(sibling)
+
+                if sibling_node.count > MIN:
+                    self.__move_to_right(root, pos)
+                else:
+                    self.__combine_siblings(root, pos)
+            else:
+                sibling_left = root_node.children[pos - 1]
+                sibling_left_node = self.return_node(sibling_left)
+                sibling_right = root_node.children[pos + 1]
+                sibling_right_node = self.return_node(sibling_right)
+
+                if sibling_left_node.count > MIN:
+                    self.__move_to_right(root, pos)
+                elif sibling_right_node.count > MIN:
+                    self.__move_to_left(root, pos + 1)
+                else:
+                    self.__combine_siblings(root, pos)
+
+    def __combine_siblings(self, root, pos):
+        root_node = self.return_node(root)
+        left_child = root_node.children[pos - 1]
+        left_child_node = self.return_node(left_child)
+        right_child = root_node.children[pos]
+        right_child_node = self.return_node(right_child)
+
+        left_child_node.count += 1
+        left_child_node.keys[left_child_node.count] = root_node.keys[pos]
+        left_child_node.children[left_child_node.count] = right_child_node.children[0]
+
+        for i in range(1, right_child_node.count + 1):
+            left_child_node.count += 1
+            left_child_node.keys[left_child_node.count] = right_child_node.keys[i]
+            left_child_node.children[left_child_node.count] = right_child_node.children[i]
+
+        root_node.keys.pop(pos)
+        root_node.children.pop(pos)
+
+        root_node.keys.append(-1)
+        root_node.children.append(-1)
+
+        root_node.count += 1
+
+        right_child_node = TreeNode()
+
+        self.__update(root, root_node)
+        self.__update(left_child, left_child_node)
+        self.__update(right_child, right_child_node)
+
+    def __move_to_right(self, root, pos):
+        root_node = self.return_node(root)
+        right_child = root_node.children[pos]
+        right_child_node = self.return_node(right_child)
+
+        right_child_node.keys.insert(0, -1)
+        right_child_node.children.insert(0, -1)
+
+        right_child_node.keys.pop(-1)
+        right_child_node.children.pop(-1)
+
+        right_child_node.count += 1
+        right_child_node.keys[1] = root_node.keys[pos]
+
+        sibling = root_node.children[pos - 1]
+        sibling_node = self.return_node(sibling)
+
+        root_node.keys[pos] = sibling_node.keys[sibling_node.count]
+        sibling_node.keys.remove(sibling_node.keys[sibling_node.count])
+        sibling_node.keys.append(-1)
+        sibling_node.count -= 1
+
+        self.__update(root, root_node)
+        self.__update(right_child, right_child_node)
+        self.__update(sibling, sibling_node)
+
+    def __move_to_left(self, root, pos):
+        root_node = self.return_node(root)
+        left_child = root_node.children[pos - 1]
+        left_child_node = self.return_node(left_child)
+
+        left_child_node.count += 1
+        left_child_node.keys[left_child_node.count] = root_node.keys[pos]
+
+        sibling = root_node.children[pos]
+        sibling_node = self.return_node(sibling)
+        left_child_node.children[left_child_node.count] = sibling_node.children[0]
+
+        root_node.keys[pos] = sibling_node.keys[1]
+
+        sibling_node.keys.remove(sibling_node.keys[1])
+        sibling_node.keys.append(-1)
+        sibling_node.count -= 1
+
+        self.__update(root, root_node)
+        self.__update(left_child, left_child_node)
+        self.__update(sibling, sibling_node)
+
+    def __promoteNextKey(self, root, pos):
+        with open(self.__file_name, 'r+') as index_file:
+            root_node = self.return_node(root, index_file)
+            leaf = root_node.children[pos]
+            leaf_node = self.return_node(leaf, index_file)
+            while leaf_node.children[0] != -1:
+                leaf = leaf_node.children[0]
+                leaf_node = self.return_node(leaf, index_file)
+            root_node.keys[pos] = leaf_node.keys[1]
+            self.__update(root, root_node)
 
     def __write(self, node, is_root=False):
         with open(self.__file_name, 'a') as index_file:
@@ -167,10 +327,14 @@ class BTree():
                 index_file.seek(0)
                 index_file.write('{}\n'.format(str(node_id).zfill(5)))
 
-    def __update(self, node_id, node):
+    def __update(self, node_id, node, isRoot=False):
         with open(self.__file_name, 'r+') as index_file:
             index_file.seek(7+NODE_SIZE*node_id)
             index_file.write(str(node))
+        
+        if isRoot:
+            with open(self.__file_name, 'r+') as index_file:
+                index_file.write('{}\n'.format(str(node_id).zfill(5)))
 
     def __get_root(self):
         root = ''
@@ -193,14 +357,3 @@ class BTree():
 
 if __name__ == '__main__':
     tree = BTree()
-    tree.insert(10)
-    tree.insert(11)
-    tree.insert(12)
-    tree.insert(13)
-    tree.insert(14)
-    tree.insert(15)
-    tree.insert(9)
-    tree.insert(8)
-    tree.insert(16)
-    tree.insert(17)
-    tree.insert(18)
