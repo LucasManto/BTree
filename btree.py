@@ -407,7 +407,10 @@ def generate_db_file():
 
 
 def generate_index_file():
-    os.remove('./primario.ndx')
+    try:
+        os.remove('./primario.ndx')
+    except Exception:
+        pass
     tree = BTree('primario.ndx')
     with open('./dados.txt') as data_file:
         lines = data_file.readlines()
@@ -482,6 +485,7 @@ def alter_data(code, tree):
         code = data[0]
         name = data[1]
         vehicle = data[2]
+        codigo = code
 
         print('Alterar: Codigo (1), Nome (2), Veiculo (3)')
         sys.stdout.write("Opcao: ")
