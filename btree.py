@@ -1,3 +1,6 @@
+import sys
+import os
+
 ORDER = 6
 NODE_SIZE = -1 + (14*ORDER)
 MAX = ORDER - 1
@@ -52,20 +55,24 @@ class TreeNode():
 
         return (self.keys[pos] == key), pos
 
-    def insert(self, key, rightNode, pos):
+    def insert(self, key, rrn, rightNode, pos):
         self.keys.insert(pos+1, key)
+        self.data_rrn.insert(pos+1, rrn)
         self.children.insert(pos+1, rightNode)
 
         self.keys.pop(-1)
+        self.data_rrn.pop(-1)
         self.children.pop(-1)
 
         self.count += 1
 
     def remove(self, pos):
         self.keys.pop(pos)
+        self.data_rrn.pop(pos)
         self.children.pop(pos)
 
         self.keys.append(-1)
+        self.data_rrn.append(-1)
         self.children.append(-1)
 
         self.count -= 1
@@ -75,8 +82,13 @@ class BTree():
     def __init__(self, file_name='arvore.ndx'):
         self.__file_name = file_name
         self.__node_count = 0
-        with open(self.__file_name, 'w') as index_file:
-            index_file.write('-1\n'.zfill(6))
+        
+        try:
+            with open(self.__file_name) as index_file:
+                pass
+        except Exception:
+            with open(self.__file_name, 'w') as index_file:
+                index_file.write('-1\n'.zfill(6))
 
     def search(self, key):
         with open(self.__file_name, 'r') as index_file:
@@ -94,40 +106,41 @@ class BTree():
 
         return self.__search_recursive(key, node.children[pos], index_file)
 
-    def insert(self, key):
+    def insert(self, key, rrn):
         root = self.__get_root()
 
-        result, middleKey, rightNode = self.__overflow(key, root)
+        result, middleKey, rrn, rightNode = self.__overflow(key, rrn, root)
         if result:
             node = TreeNode()
-            node.insert(key, -1, 0)
+            node.insert(key, rrn, -1, 0)
             node.keys[1] = middleKey
+            node.data_rrn[1] = rrn
             node.children[0] = root
             node.children[1] = rightNode
             self.__write(node, True)
 
-    def __overflow(self, key, root):
+    def __overflow(self, key, rrn, root):
         if root == -1:
             middleKey = key
             rightNode = -1
-            return True, middleKey, rightNode
+            return True, middleKey, rrn, rightNode
         
         pos = -1
         root_node = self.return_node(root)
         result, pos = root_node.searck_key(key)
 
-        result, middleKey, rightNode = self.__overflow(key, root_node.children[pos])
+        result, middleKey, rrn, rightNode = self.__overflow(key, rrn, root_node.children[pos])
         if result:
             if root_node.count < MAX:
-                root_node.insert(middleKey, rightNode, pos)
+                root_node.insert(middleKey, rrn, rightNode, pos)
                 self.__update(root, root_node)
-                return False, middleKey, rightNode
+                return False, middleKey, rrn, rightNode
             else:
-                middleKey, rightNode = self.__split(middleKey, rightNode, root, pos)
-                return True, middleKey, rightNode
-        return False, -1, -1
+                middleKey, newRrn, rightNode = self.__split(middleKey, rrn, rightNode, root, pos)
+                return True, middleKey, newRrn, rightNode
+        return False, -1, -1, -1
 
-    def __split(self, middleKey, rightNode, root, pos):
+    def __split(self, middleKey, rrn, rightNode, root, pos):
         cut_spot = -1
         if pos < MIN:
             cut_spot = MIN
@@ -139,30 +152,34 @@ class BTree():
         newRightNode = TreeNode()
         for i in range(cut_spot + 1, root_node.count + 1):
             newRightNode.keys[i - cut_spot] = root_node.keys[i]
+            newRightNode.data_rrn[i - cut_spot] = root_node.data_rrn[i]
             newRightNode.children[i - cut_spot] = root_node.children[i]
             
             root_node.keys[i] = -1
+            root_node.data_rrn[i] = -1
             root_node.children[i] = -1
 
         newRightNode.count = root_node.count - cut_spot
         root_node.count = cut_spot
 
         if pos <= MIN:
-            root_node.insert(middleKey, rightNode, pos)
+            root_node.insert(middleKey, rrn, rightNode, pos)
         else:
-            newRightNode.insert(middleKey, rightNode, pos - cut_spot)
+            newRightNode.insert(middleKey, rrn, rightNode, pos - cut_spot)
 
         newMiddleKey = root_node.keys[root_node.count]
+        newRrn = root_node.data_rrn[root_node.count]
         newRightNode.children[0] = root_node.children[root_node.count]
 
         root_node.keys[root_node.count] = -1
+        root_node.data_rrn[root_node.count] = -1
         root_node.children[root_node.count] = -1
         root_node.count -= 1
 
         self.__update(root, root_node)
         self.__write(newRightNode)
 
-        return newMiddleKey, self.__node_count-1
+        return newMiddleKey, newRrn, self.__node_count-1
 
     def remove(self, key):
         with open(self.__file_name, 'r+') as index_file:
@@ -236,17 +253,21 @@ class BTree():
 
         left_child_node.count += 1
         left_child_node.keys[left_child_node.count] = root_node.keys[pos]
+        left_child_node.data_rrn[left_child_node.count] = root_node.data_rrn[pos]
         left_child_node.children[left_child_node.count] = right_child_node.children[0]
 
         for i in range(1, right_child_node.count + 1):
             left_child_node.count += 1
             left_child_node.keys[left_child_node.count] = right_child_node.keys[i]
+            left_child_node.data_rrn[left_child_node.count] = right_child_node.data_rrn[i]
             left_child_node.children[left_child_node.count] = right_child_node.children[i]
 
         root_node.keys.pop(pos)
+        root_node.data_rrn.pop(pos)
         root_node.children.pop(pos)
 
         root_node.keys.append(-1)
+        root_node.data_rrn.append(-1)
         root_node.children.append(-1)
 
         root_node.count += 1
@@ -263,20 +284,26 @@ class BTree():
         right_child_node = self.return_node(right_child)
 
         right_child_node.keys.insert(0, -1)
+        right_child_node.data_rrn.insert(0, -1)
         right_child_node.children.insert(0, -1)
 
         right_child_node.keys.pop(-1)
+        right_child_node.data_rrn.pop(-1)
         right_child_node.children.pop(-1)
 
         right_child_node.count += 1
         right_child_node.keys[1] = root_node.keys[pos]
+        right_child_node.data_rrn[1] = root_node.data_rrn[pos]
 
         sibling = root_node.children[pos - 1]
         sibling_node = self.return_node(sibling)
 
         root_node.keys[pos] = sibling_node.keys[sibling_node.count]
+        root_node.data_rrn[pos] = sibling_node.data_rrn[sibling_node.count]
         sibling_node.keys.remove(sibling_node.keys[sibling_node.count])
+        sibling_node.data_rrn.remove(sibling_node.data_rrn[sibling_node.count])
         sibling_node.keys.append(-1)
+        sibling_node.data_rrn.append(-1)
         sibling_node.count -= 1
 
         self.__update(root, root_node)
@@ -290,15 +317,19 @@ class BTree():
 
         left_child_node.count += 1
         left_child_node.keys[left_child_node.count] = root_node.keys[pos]
+        left_child_node.data_rrn[left_child_node.count] = root_node.data_rrn[pos]
 
         sibling = root_node.children[pos]
         sibling_node = self.return_node(sibling)
         left_child_node.children[left_child_node.count] = sibling_node.children[0]
 
         root_node.keys[pos] = sibling_node.keys[1]
+        root_node.data_rrn[pos] = sibling_node.data_rrn[1]
 
         sibling_node.keys.remove(sibling_node.keys[1])
+        sibling_node.data_rrn.remove(sibling_node.data_rrn[1])
         sibling_node.keys.append(-1)
+        sibling_node.data_rrn.append(-1)
         sibling_node.count -= 1
 
         self.__update(root, root_node)
@@ -314,6 +345,7 @@ class BTree():
                 leaf = leaf_node.children[0]
                 leaf_node = self.return_node(leaf, index_file)
             root_node.keys[pos] = leaf_node.keys[1]
+            root_node.data_rrn[pos] = leaf_node.data_rrn[1]
             self.__update(root, root_node)
 
     def __write(self, node, is_root=False):
@@ -355,5 +387,201 @@ class BTree():
             return TreeNode(index_file.readline())
 
 
+def get_formatted_db_file():
+    formatted_lines = []
+    with open('./TabelaInicial.txt') as data_file:
+        lines = data_file.readlines()
+        for line in lines:
+            line = line.split('|')
+            line = [word.strip() for word in line]
+            formatted_lines.append(line)
+    return formatted_lines
+
+
+def generate_db_file():
+    formatted_lines = get_formatted_db_file()
+    with open('./dados.txt', 'w') as data_file:
+        for line in formatted_lines[3:-1]:
+            write_line = '{}|{}|{}|#\n'.format(line[1], line[2], line[3])
+            data_file.write(write_line)
+
+
+def generate_index_file():
+    os.remove('./primario.ndx')
+    tree = BTree('primario.ndx')
+    with open('./dados.txt') as data_file:
+        lines = data_file.readlines()
+        rrn = 0
+        for data in lines:
+            prim_key = data.split('|')[0]
+            if '$' in prim_key:
+                rrn += len(data) + 1
+                continue
+            tree.insert(int(prim_key), rrn)
+            rrn += len(data) + 1
+    return tree
+
+
+def insert(code, name, vehicle, tree):
+    code = int(code)
+    rrn = tree.search(code)
+    if rrn is -1:
+        data = '{}|{}|{}|#\n'.format(str(code).zfill(3), name, vehicle)
+        with open('./dados.txt', 'a') as data_file:
+            rrn = data_file.tell()
+            data_file.write(data)
+        tree.insert(code, rrn)
+        print('\nDados registrados!\n')
+    else:
+        print('\nO codigo ja existe, escolha outro. Retornando para o menu...\n')
+
+
+def search_data(code, tree):
+    code = int(code)
+    rrn = tree.search(code)
+    
+    if rrn is not -1:
+        node = tree.return_node(rrn)
+        index = node.keys.index(code)
+        data_rrn = node.data_rrn[index]
+
+        with open("./dados.txt", "r") as data_file:
+            data_file.seek(data_rrn)
+            data = data_file.readline()
+            data = data.split('|')
+            return data[:-1]
+    else:
+        return False
+
+
+def remove_data(code, tree):
+    code = int(code)
+    rrn = tree.search(code)
+
+    if rrn is -1:
+        print('\nDados nao encotrados. Retornando ao menu...\n')
+    else:
+        node = tree.return_node(rrn)
+        index = node.keys.index(code)
+        data_rrn = node.data_rrn[index]
+
+        with open('./dados.txt', 'r+') as data_file:
+            data_file.seek(data_rrn)
+            data_file.write('$')
+        tree.remove(code)
+
+def alter_data(code, tree):
+    code = int(code)
+    rrn = tree.search(code)
+
+    if rrn is -1:
+        print('\nDados nao encotrados. Retornando ao menu...\n')
+    else:
+        data = search_data(code, tree)
+
+        code = data[0]
+        name = data[1]
+        vehicle = data[2]
+
+        print('Alterar: Codigo (1), Nome (2), Veiculo (3)')
+        sys.stdout.write("Opcao: ")
+        option = input()
+
+        if option == '1':
+            sys.stdout.write("  Novo Codigo: ")
+            codigo = input()
+            rrn = search_data(codigo, tree)
+            if rrn:
+                print('\nO codigo ja existe, escolha outro. Retornando para o menu...\n')
+                return
+        elif option == '2':
+            sys.stdout.write("  Novo Nome: ")
+            name = input()
+        elif option == '3':
+            sys.stdout.write("  Novo Veiculo: ")
+            vehicle = input()
+        remove_data(code, tree)
+        insert(codigo, name, vehicle, tree)
+
+
+def compress(tree):
+    with open('./compress.bkp', 'w') as compressed_file:
+        with open('./primario.ndx') as index_file:
+            index_file.readline()
+            data = index_file.readlines()
+            for d in data:
+                node = TreeNode(d)
+                for key in node.keys[1:]:
+                    data = search_data(key, tree)
+                    if data:
+                        compressed_file.write('{}|{}|{}|#\n'.format(str(data[0]).zfill(3), data[1], data[2]))
+    os.remove('./dados.txt')
+    os.rename('compress.bkp', 'dados.txt')
+    generate_index_file()
+
+
+def menu(tree):
+    option = -2
+    while(option != 6):
+        print("Menu:")
+        print(" 1. Inserir")
+        print(" 2. Remover")
+        print(" 3. Alterar")
+        print(" 4. Procurar")
+        print(" 5. Compactar")
+        print(" 6. Sair")
+        sys.stdout.write("  Opcao: ")
+        option = input()
+        if option == "1":
+            sys.stdout.write("  Codigo: ")
+            codigo = input()
+            sys.stdout.write("  Nome: ")
+            nome = input()
+            sys.stdout.write("  Veiculo: ")
+            veiculo = input()
+            insert(codigo, nome, veiculo, tree)
+        if option == '2':
+            sys.stdout.write("  Codigo: ")
+            codigo = input()
+            remove_data(codigo, tree)
+        if option == '3':
+            sys.stdout.write("  Codigo: ")
+            codigo = input()
+            alter_data(codigo, tree)
+        if option == '4':
+            sys.stdout.write("  Codigo: ")
+            codigo = input()
+            data = search_data(codigo, tree)
+            if data:
+                print('\nDados encontrados:')
+                print(' Codigo: {}'.format(data[0]))
+                print(' Nome: {}'.format(data[1]))
+                print(' Veiculo: {}\n'.format(data[2]))
+            else:
+                print('\nDados nao encontrados\n\n')
+        if option == '5':
+            print('\nComprimindo arquivo de dados...\n\n')
+            compress(tree)
+            print('\nCompressao completa\n\n')
+        if option == '6':
+            os.remove('./primario.lock')
+            exit()
+
+
 if __name__ == '__main__':
-    tree = BTree()
+    tree = None
+    try:
+        with open('./primario.lock') as lock:
+            print("\nArquivo de indices corrompido, estamos restaurando-o.\n")
+            tree = generate_index_file()
+    except Exception:
+        try:
+            with open('./primario.ndx') as index_file:
+                pass
+        except Exception:
+            generate_db_file()
+            tree = generate_index_file()
+    with open('./primario.lock', 'w') as lock:
+        pass
+    tree = BTree('primario.ndx')
+    menu(tree)
